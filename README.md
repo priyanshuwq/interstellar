@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Interstellar — A Cinematic Web Experience
 
-## Getting Started
+A visually immersive, space-themed website inspired by Christopher Nolan's *Interstellar*. Built as a frontend design showcase using Next.js, React, Tailwind CSS, and Three.js.
 
-First, run the development server:
+## What it is
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+A single-page cinematic experience that takes you through the key elements of the Interstellar universe:
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **Hero** — Typing animation that seamlessly transitions into the navigation bar
+- **The Mission** — Tactical HUD-style mission objective cards alongside the 3D Endurance spacecraft
+- **Gargantua** — A real-time, physically-accurate raymarched black hole with gravitational lensing, accretion disk, and Doppler shift
+- **Time Dilation** — An interactive demonstration of relativity (hover to watch Earth years fly by)
+- **Crew** — Character profiles with cinematic portrait reveals on hover
+- **Soundtrack** — Hans Zimmer's theme plays in the background with a toggle in the navbar
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Tech
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Next.js 16** (App Router)
+- **React 19** + **TypeScript**
+- **Tailwind CSS 4**
+- **Three.js** via React Three Fiber + Drei
+- **GSAP** + ScrollTrigger for scroll-driven animations
+- **Custom GLSL shader** for the black hole (600-step raymarching with relativistic physics)
 
-## Learn More
+## The Black Hole
 
-To learn more about Next.js, take a look at the following resources:
+The Gargantua visualization is not a video or image — it's a real-time fragment shader running in the browser. It simulates:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Gravitational lensing of background starfields
+- Relativistic accretion disk with temperature-based coloring
+- Doppler shifting and relativistic beaming
+- Lorentz transformation of light rays
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The physics are based on the Schwarzschild metric, the same math used in the actual film's visual effects.
 
-## Deploy on Vercel
+## Credits
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Film: *Interstellar* (2014) directed by Christopher Nolan
+- Music: Hans Zimmer — Main Theme
+- Endurance 3D Model: [Sketchfab](https://sketchfab.com)
+- Black hole shader adapted from [sirxemic/threejs-blackhole](https://github.com/nickyvanurk/threejs-blackhole)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+Made by [Priyanshu](https://shekhr.dev)
