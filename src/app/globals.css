@@ -68,3 +68,51 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-steel);
 }
+
+/* 
+ * Performance: hint browser about animated elements for compositor promotion.
+ * Only apply will-change to elements that actually animate.
+ */
+canvas {
+  /* Promote WebGL canvases to their own compositor layer */
+  will-change: contents;
+}
+
+/* 
+ * Content visibility: skip rendering off-screen sections until needed.
+ * This saves significant layout + paint cost on initial load.
+ */
+#mission,
+#time,
+#crew {
+  content-visibility: auto;
+  /* Reserve estimated height so scrollbar doesn't jump */
+  contain-intrinsic-size: 0 100vh;
+}
+
+/*
+ * Respect user's reduced-motion preference.
+ * Disables all CSS transitions and keyframe animations.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Hide the noise overlay for users who prefer reduced motion */
+  .bg-noise {
+    display: none;
+  }
+}
+
+/* Smooth font rendering for dark backgrounds */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeSpeed;
+}

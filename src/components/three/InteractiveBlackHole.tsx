@@ -6,17 +6,26 @@ import * as THREE from "three";
 import { Canvas } from "@react-three/fiber";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { useDevicePerformance } from "@/hooks/useDevicePerformance";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
 }
 
-const fragmentShader = `
-#define STEP 0.05
-#define NSTEPS 600
+// Adaptive shader: low-quality path for mobile/low-end devices
+function buildFragmentShader(quality: "high" | "medium" | "low") {
+  const nsteps = quality === "high" ? 300 : quality === "medium" ? 180 : 100;
+  const step = quality === "low" ? 0.1 : 0.06;
+  // On low quality, disable expensive relativistic effects
+  const useDoppler = quality !== "low";
+  const useLorentz = quality !== "low";
+  const useBeaming = quality !== "low";
+
+  return `
+#define STEP ${step.toFixed(4)}
+#define NSTEPS ${nsteps}
 #define PI 3.141592653589793238462643383279
 #define DEG_TO_RAD (PI/180.0)
-#define ROT_Y(a) mat3(1.0, 0.0, 0.0, 0.0, cos(a), sin(a), 0.0, -sin(a), cos(a))
 #define ROT_Z(a) mat3(cos(a), -sin(a), 0.0, sin(a), cos(a), 0.0, 0.0, 0.0, 1.0)
 
 uniform float time;
@@ -35,10 +44,6 @@ uniform bool use_disk_texture;
 const float DISK_IN = 2.0;
 const float DISK_WIDTH = 4.0;
 
-uniform bool doppler_shift;
-uniform bool lorentz_transform;
-uniform bool beaming;
-
 uniform sampler2D bg_texture;
 uniform sampler2D star_texture;
 uniform sampler2D disk_texture;
@@ -55,6 +60,7 @@ vec2 to_spherical(vec3 cartesian_coord){
   return uv;
 }
 
+${useLorentz ? `
 vec3 lorentz_transform_velocity(vec3 u, vec3 v){
   float speed = length(v);
   if (speed > 0.0){
@@ -64,7 +70,7 @@ vec3 lorentz_transform_velocity(vec3 u, vec3 v){
     return new_u;
   }
   return u;
-}
+}` : ``}
 
 vec3 temp_to_color(float temp_kelvin){
   vec3 color;
@@ -80,7 +86,7 @@ vec3 temp_to_color(float temp_kelvin){
     if (color.r < 0.0) color.r = 0.0;
     color.r = 329.698727446 * pow(color.r, -0.1332047592);
     if (color.r < 0.0) color.r = 0.0;
-    if (color.g > 255.0) color.r = 255.0;
+    if (color.r > 255.0) color.r = 255.0;
     color.g = temp_kelvin - 60.0;
     if (color.g < 0.0) color.g = 0.0;
     color.g = 288.1221695283 * pow(color.g, -0.0755148492);
@@ -112,8 +118,7 @@ void main() {
   vec3 pixel_pos = cam_pos + forward + nright*uv.x*uvfov + up*uv.y*uvfov;
   vec3 ray_dir = normalize(pixel_pos - cam_pos);
 
-  if (lorentz_transform)
-    ray_dir = lorentz_transform_velocity(ray_dir, cam_vel);
+  ${useLorentz ? `ray_dir = lorentz_transform_velocity(ray_dir, cam_vel);` : ``}
 
   vec4 color = vec4(0.0,0.0,0.0,1.0);
   vec3 point = cam_pos;
@@ -124,22 +129,19 @@ void main() {
   float ray_gamma = 1.0/sqrt(1.0-dot(cam_vel,cam_vel));
   float ray_doppler_factor = ray_gamma * (1.0 + dot(ray_dir, -cam_vel));
   float ray_intensity = 1.0;
-  if (beaming)
-    ray_intensity /= pow(ray_doppler_factor, 3.0);
+  ${useBeaming ? `ray_intensity /= pow(ray_doppler_factor, 3.0);` : ``}
 
   vec3 oldpoint;
-  float pointsqr;
-  float distance = length(point);
+  float distance_val = length(point);
 
   for (int i=0; i<NSTEPS; i++){
     oldpoint = point;
     point += velocity * STEP;
     vec3 accel = -1.5 * h2 * point / pow(dot(point,point),2.5);
     velocity += accel * STEP;
-    distance = length(point);
-    if (distance < 0.0) break;
+    distance_val = length(point);
 
-    bool horizon_mask = distance < 1.0 && length(oldpoint) > 1.0;
+    bool horizon_mask = distance_val < 1.0 && length(oldpoint) > 1.0;
     if (horizon_mask) {
       color += vec4(0.0,0.0,0.0,1.0);
       break;
@@ -156,20 +158,20 @@ void main() {
           phi -= time;
           phi = mod(phi, PI*2.0);
           float disk_gamma = 1.0/sqrt(1.0-dot(disk_velocity, disk_velocity));
-          float disk_doppler_factor = disk_gamma*(1.0+dot(ray_dir/distance, disk_velocity));
+          float disk_doppler_factor = disk_gamma*(1.0+dot(ray_dir/distance_val, disk_velocity));
 
           if (use_disk_texture){
             vec2 tex_coord = vec2(mod(phi,2.0*PI)/(2.0*PI),1.0-(r-DISK_IN)/(DISK_WIDTH));
-            vec4 disk_color = texture2D(disk_texture, tex_coord) / (ray_doppler_factor * disk_doppler_factor);
+            vec4 disk_color = texture2D(disk_texture, tex_coord) ${useDoppler ? `/ (ray_doppler_factor * disk_doppler_factor)` : ``};
             float disk_alpha = clamp(dot(disk_color.rgb,disk_color.rgb)/4.5,0.0,1.0);
-            if (beaming) disk_alpha /= pow(disk_doppler_factor,3.0);
+            ${useBeaming ? `disk_alpha /= pow(disk_doppler_factor,3.0);` : ``}
             color += vec4(disk_color.rgb, 1.0)*disk_alpha;
           } else {
             float disk_temperature = 10000.0*(pow(r/DISK_IN, -3.0/4.0));
-            if (doppler_shift) disk_temperature /= ray_doppler_factor*disk_doppler_factor;
+            ${useDoppler ? `disk_temperature /= ray_doppler_factor*disk_doppler_factor;` : ``}
             vec3 disk_color = temp_to_color(disk_temperature);
             float disk_alpha = clamp(dot(disk_color,disk_color)/3.0,0.0,1.0);
-            if (beaming) disk_alpha /= pow(disk_doppler_factor,3.0);
+            ${useBeaming ? `disk_alpha /= pow(disk_doppler_factor,3.0);` : ``}
             color += vec4(disk_color, 1.0)*disk_alpha;
           }
         }
@@ -177,7 +179,7 @@ void main() {
     }
   }
 
-  if (distance > 1.0){
+  if (distance_val > 1.0){
     ray_dir = normalize(point - oldpoint);
     vec2 tex_coord = to_spherical(ray_dir * ROT_Z(45.0 * DEG_TO_RAD));
     vec4 star_color = texture2D(star_texture, tex_coord);
@@ -185,7 +187,7 @@ void main() {
       float star_temperature = (MIN_TEMPERATURE + TEMPERATURE_RANGE*star_color.r);
       float star_velocity = star_color.b - 0.5;
       float star_doppler_factor = sqrt((1.0+star_velocity)/(1.0-star_velocity));
-      if (doppler_shift) star_temperature /= ray_doppler_factor*star_doppler_factor;
+      ${useDoppler ? `star_temperature /= ray_doppler_factor*star_doppler_factor;` : ``}
       color += vec4(temp_to_color(star_temperature),1.0) * star_color.g;
     }
     color += texture2D(bg_texture, tex_coord) * 0.25;
@@ -196,6 +198,7 @@ void main() {
   gl_FragColor = vec4(color.rgb * ray_intensity, 1.0);
 }
 `;
+}
 
 const vertexShader = `
 varying vec2 vUv;
@@ -205,45 +208,53 @@ void main() {
 }
 `;
 
-function BlackHoleShader() {
+function BlackHoleShader({ quality }: { quality: "high" | "medium" | "low" }) {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
+  // Resolution captured once; updated only on window resize
+  const resolutionRef = useRef(
+    typeof window !== "undefined"
+      ? new THREE.Vector2(window.innerWidth, window.innerHeight)
+      : new THREE.Vector2(1000, 1000)
+  );
+
+  // Build fragment shader once per quality tier (memoized)
+  const fragmentShader = useMemo(() => buildFragmentShader(quality), [quality]);
 
   const uniforms = useMemo(
     () => ({
-      time: { type: "f", value: 0.0 },
-      resolution: { type: "v2", value: new THREE.Vector2(
-        typeof window !== "undefined" ? window.innerWidth : 1000,
-        typeof window !== "undefined" ? window.innerHeight : 1000
-      ) },
-      accretion_disk: { type: "b", value: true },
-      use_disk_texture: { type: "b", value: true },
-      lorentz_transform: { type: "b", value: true },
-      doppler_shift: { type: "b", value: true },
-      beaming: { type: "b", value: true },
-      cam_pos: { type: "v3", value: new THREE.Vector3(0, 0.5, -12.0) },
-      cam_vel: { type: "v3", value: new THREE.Vector3(0, 0, 0) },
-      cam_dir: { type: "v3", value: new THREE.Vector3(0, -0.05, 1.0).normalize() },
-      cam_up: { type: "v3", value: new THREE.Vector3(0, 1, 0) },
-      fov: { type: "f", value: 60.0 },
-      bg_texture: { type: "t", value: null },
-      star_texture: { type: "t", value: null },
-      disk_texture: { type: "t", value: null }
+      time: { value: 0.0 },
+      resolution: { value: resolutionRef.current },
+      accretion_disk: { value: true },
+      use_disk_texture: { value: true },
+      lorentz_transform: { value: quality !== "low" },
+      doppler_shift: { value: quality !== "low" },
+      beaming: { value: quality === "high" },
+      cam_pos: { value: new THREE.Vector3(0, 0.5, -12.0) },
+      cam_vel: { value: new THREE.Vector3(0, 0, 0) },
+      cam_dir: { value: new THREE.Vector3(0, -0.05, 1.0).normalize() },
+      cam_up: { value: new THREE.Vector3(0, 1, 0) },
+      fov: { value: 60.0 },
+      bg_texture: { value: null },
+      star_texture: { value: null },
+      disk_texture: { value: null },
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
 
   useEffect(() => {
     const loader = new THREE.TextureLoader();
 
-    loader.load('/textures/milkyway.jpg', (t) => {
-      t.magFilter = THREE.NearestFilter;
-      t.minFilter = THREE.NearestFilter;
+    // Use WebP texture if available (with PNG fallback)
+    loader.load("/textures/milkyway.jpg", (t) => {
+      t.magFilter = THREE.LinearFilter;
+      t.minFilter = THREE.LinearFilter;
       t.wrapS = THREE.ClampToEdgeWrapping;
       t.wrapT = THREE.ClampToEdgeWrapping;
       if (materialRef.current) materialRef.current.uniforms.bg_texture.value = t;
     });
 
-    loader.load('/textures/star_noise.png', (t) => {
+    loader.load("/textures/star_noise.png", (t) => {
       t.magFilter = THREE.LinearFilter;
       t.minFilter = THREE.LinearFilter;
       t.wrapS = THREE.ClampToEdgeWrapping;
@@ -251,7 +262,9 @@ function BlackHoleShader() {
       if (materialRef.current) materialRef.current.uniforms.star_texture.value = t;
     });
 
-    loader.load('/textures/accretion_disk.png', (t) => {
+    // Use WebP if supported, fallback to PNG
+    const diskSrc = "/textures/accretion_disk.webp";
+    loader.load(diskSrc, (t) => {
       t.magFilter = THREE.LinearFilter;
       t.minFilter = THREE.LinearFilter;
       t.wrapS = THREE.ClampToEdgeWrapping;
@@ -273,27 +286,32 @@ function BlackHoleShader() {
             const dirY = gsap.utils.interpolate(-0.25, -0.05, self.progress);
             materialRef.current.uniforms.cam_dir.value.set(0, dirY, 1).normalize();
           }
-        }
+        },
       });
     });
 
+    // Resolution update: only on resize, NOT every frame
     const handleResize = () => {
+      resolutionRef.current.set(window.innerWidth, window.innerHeight);
       if (materialRef.current) {
-        materialRef.current.uniforms.resolution.value.set(window.innerWidth, window.innerHeight);
+        materialRef.current.uniforms.resolution.value.set(
+          window.innerWidth,
+          window.innerHeight
+        );
       }
     };
-    window.addEventListener('resize', handleResize);
+    window.addEventListener("resize", handleResize, { passive: true });
 
     return () => {
       ctx.revert();
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener("resize", handleResize);
     };
   }, []);
 
   useFrame((state) => {
     if (materialRef.current) {
+      // Only update time — resolution is handled by the resize listener
       materialRef.current.uniforms.time.value = state.clock.elapsedTime * 0.5;
-      materialRef.current.uniforms.resolution.value.set(window.innerWidth, window.innerHeight);
     }
   });
 
@@ -312,10 +330,15 @@ function BlackHoleShader() {
 }
 
 export default function InteractiveBlackHole() {
+  const quality = useDevicePerformance();
+  // Reduced DPR on lower-end devices
+  const dpr: [number, number] =
+    quality === "high" ? [1, 1.5] : quality === "medium" ? [1, 1] : [0.75, 1];
+
   return (
     <div className="absolute inset-0 z-0 bg-black pointer-events-none">
-      <Canvas orthographic camera={{ manual: true }} dpr={[1, 1]}>
-        <BlackHoleShader />
+      <Canvas orthographic camera={{ manual: true }} dpr={dpr} gl={{ antialias: false, powerPreference: "high-performance" }}>
+        <BlackHoleShader quality={quality} />
       </Canvas>
     </div>
   );

@@ -1,10 +1,27 @@
+import dynamic from "next/dynamic";
 import Navbar from "@/components/layout/Navbar";
 import HeroSection from "@/components/sections/HeroSection";
-import MissionSection from "@/components/sections/MissionSection";
-import GargantuaSection from "@/components/sections/GargantuaSection";
-import TimeDilationSection from "@/components/sections/TimeDilationSection";
-import CrewSection from "@/components/sections/CrewSection";
-import Footer from "@/components/layout/Footer";
+
+// Dynamically import below-fold sections — splits JS bundle, defers hydration
+const MissionSection = dynamic(
+  () => import("@/components/sections/MissionSection"),
+  { loading: () => null }
+);
+const GargantuaSection = dynamic(
+  () => import("@/components/sections/GargantuaSection"),
+  { loading: () => null }
+);
+const TimeDilationSection = dynamic(
+  () => import("@/components/sections/TimeDilationSection"),
+  { loading: () => null }
+);
+const CrewSection = dynamic(
+  () => import("@/components/sections/CrewSection"),
+  { loading: () => null }
+);
+const Footer = dynamic(() => import("@/components/layout/Footer"), {
+  loading: () => null,
+});
 
 export default function Home() {
   return (
