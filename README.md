@@ -38,7 +38,7 @@ The physics are based on the Schwarzschild metric, the same math used in the act
 - Film: *Interstellar* (2014) directed by Christopher Nolan
 - Music: Hans Zimmer — Main Theme
 - Endurance 3D Model: [Sketchfab](https://sketchfab.com)
-- Black hole shader adapted from [sirxemic/threejs-blackhole](https://github.com/nickyvanurk/threejs-blackhole)
+- Black hole shader adapted from [sirxemic/threejs-blackhole](https://github.com/vlwkaos/threejs-blackhole)
 
 ---
 
